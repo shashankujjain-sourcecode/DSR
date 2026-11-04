@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Curriculum Sales & Expense Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+
+  <!-- CONFIGURATION -->
+  <script>
+    // Live Google Apps Script Endpoint
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz7Oa3piIEHaV8YlzA5pn7LO9WOT1dThONNcBZfxdEJwokFGqi20mijmpB3xbuzKyk1/exec";
+
+    // Complete Team Directory with 4-Digit PINs
+    const USERS = [
+      { id: 1, name: "Mazher", role: "AGM", city: "Regional HQ", pin: "1001", isManager: true },
+      { id: 2, name: "Deepinder Yadav", role: "Dy. AGM", city: "Regional HQ", pin: "1002", isManager: true },
+      { id: 3, name: "Shashank", role: "Executive", city: "Ujjain", pin: "2001", isManager: false },
+      { id: 4, name: "Varun", role: "Executive", city: "Baramati", pin: "2002", isManager: false },
+      { id: 5, name: "Aman", role: "Executive", city: "Gorakhpur", pin: "2003", isManager: false },
+      { id: 6, name: "Imran", role: "Executive", city: "Delhi", pin: "2004", isManager: false },
+      { id: 7, name: "Hasan", role: "Executive", city: "Lucknow", pin: "2005", isManager: false },
+      { id: 8, name: "Naveen", role: "Executive", city: "Jaipur", pin: "2006", isManager: false },
+      { id: 9, name: "Shreyas", role: "Executive", city: "Jaipur", pin: "2007", isManager: false }
+    ];
+
+    let currentUser = null;
+  </script>
+
+  <!-- TOP HEADER -->
+  <header class="bg-indigo-900 text-white px-4 py-3 flex justify-between items-center shadow">
+    <div>
+      <h1 class="text-base font-bold tracking-tight">Curriculum Sales Tracker</h1>
+      <p id="userStatus" class="text-xs text-indigo-200">Not logged in</p>
+    </div>
+    <button id="logoutBtn" onclick="logout()" class="hidden bg-indigo-700 hover:bg-indigo-600 text-xs px-3 py-1.5 rounded text-white">Logout</button>
+  </header>
+
+  <!-- LOGIN SCREEN -->
+  <main id="loginScreen" class="max-w-md mx-auto p-4 mt-8">
+    <div class="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+      <h2 class="text-lg font-semibold mb-4 text-center">Team Login</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Select Your Name</label>
+          <select id="loginUserSelect" class="w-full border rounded-lg p-2.5 text-sm bg-white">
+            <option value="">-- Choose Member --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">4-Digit PIN</label>
+          <input type="password" id="loginPin" maxlength="4" class="w-full border rounded-lg p-2.5 text-sm tracking-widest text-center" placeholder="••••" />
+        </div>
+        <p id="loginError" class="text-red-500 text-xs hidden text-center">Incorrect PIN. Please re-enter.</p>
+        <button onclick="handleLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg text-sm transition">Enter Portal</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- SALES EXECUTIVE VIEW (LOG VISIT & EXPENSE) -->
+  <main id="repScreen" class="max-w-xl mx-auto p-4 hidden">
+    <div class="bg-white p-5 rounded-xl shadow-md border border-slate-200">
+      <div class="flex justify-between items-center pb-3 border-b mb-4">
+        <div>
+          <h2 class="font-bold text-slate-800">Log Field Visit</h2>
+          <span id="repBadge" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-medium"></span>
+        </div>
+        <span class="text-xs text-slate-400">All fields required</span>
+      </div>
+
+      <form id="visitForm" onsubmit="submitVisit(event)" class="space-y-4 text-sm">
+        
+        <!-- 1. Travel & Expense -->
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+          <p class="text-xs font-bold text-slate-700 uppercase tracking-wide">1. Travel & Expense Verification</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Vehicle</label>
+              <select id="vehicle" onchange="calcKm()" class="w-full border rounded p-2 text-xs bg-white" required>
+                <option value="Bike">Bike (₹3.50/KM)</option>
+                <option value="Car">Car (₹8.00/KM)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Auto Travel Claim</label>
+              <input type="text" id="claimAmount" class="w-full border rounded p-2 text-xs bg-slate-100 font-bold text-indigo-700" readonly value="₹ 0.00" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Opening KM</label>
+              <input type="number" id="openingKm" oninput="calcKm()" class="w-full border rounded p-2 text-xs" placeholder="e.g. 14200" required />
+              <label class="block text-[11px] text-slate-500 mt-1">Photo Proof:</label>
+              <input type="file" id="openKmImg" accept="image/*" class="text-[10px] w-full text-slate-500" required />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Closing KM</label>
+              <input type="number" id="closingKm" oninput="calcKm()" class="w-full border rounded p-2 text-xs" placeholder="e.g. 14245" required />
+              <label class="block text-[11px] text-slate-500 mt-1">Photo Proof:</label>
+              <input type="file" id="closeKmImg" accept="image/*" class="text-[10px] w-full text-slate-500" required />
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. School & Meeting Details -->
+        <div class="space-y-3">
+          <p class="text-xs font-bold text-slate-700 uppercase tracking-wide">2. School & Meeting Details</p>
+          
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Entity Type</label>
+              <select id="entityType" class="w-full border rounded p-2 text-xs bg-white">
+                <option value="School">School</option>
+                <option value="Distributor">Distributor</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">School / Distributor Name</label>
+              <input type="text" id="schoolName" class="w-full border rounded p-2 text-xs" placeholder="Full name" required />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1 font-semibold text-indigo-900">Meeting Done With</label>
+              <select id="meetingDoneWith" class="w-full border rounded p-2 text-xs bg-white font-medium text-slate-800" required>
+                <option value="Principal">Principal</option>
+                <option value="Academic Coordinator">Academic Coordinator</option>
+                <option value="Director - Owner">Director - Owner</option>
+                <option value="Teacher">Teacher</option>
+                <option value="No Meeting">No Meeting</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1 font-semibold text-indigo-900">Client Stage</label>
+              <select id="clientStage" onchange="toggleDemoDate()" class="w-full border rounded p-2 text-xs bg-white font-medium text-slate-800" required>
+                <option value="New Prospect">New Prospect</option>
+                <option value="1st Visit Done">1st Visit Done</option>
+                <option value="Specimen Given">Specimen / Sample Given</option>
+                <option value="Demo Scheduled">Demo Scheduled</option>
+                <option value="Demo Done">Demo Done</option>
+                <option value="Decision Pending">Decision Pending (Trustee)</option>
+                <option value="Deal Won">Deal Won (PO Received)</option>
+                <option value="Deal Lost">Deal Lost</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic Demo Date Field -->
+          <div id="demoDateField" class="hidden bg-amber-50 p-2.5 rounded border border-amber-200">
+            <label class="block text-xs text-amber-900 font-semibold mb-1">Demo Scheduled Date & Time</label>
+            <input type="datetime-local" id="demoDate" class="w-full border rounded p-2 text-xs bg-white" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Total Student Count</label>
+              <input type="number" id="totalStudents" class="w-full border rounded p-2 text-xs" placeholder="e.g. 650" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Grades Running</label>
+              <input type="text" id="grades" class="w-full border rounded p-2 text-xs" placeholder="e.g. 6th to 10th" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-600 mb-1">Existing Competitor Books in Use</label>
+            <input type="text" id="competitorBooks" class="w-full border rounded p-2 text-xs" placeholder="e.g. NCERT, Oxford, Cordova..." />
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-600 mb-1">School Front / Board Photo</label>
+            <input type="file" id="frontImg" accept="image/*" class="text-xs w-full text-slate-500" required />
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-600 mb-1">Meeting Remarks & Feedback</label>
+            <textarea id="meetingRemarks" rows="2" class="w-full border rounded p-2 text-xs" placeholder="Key takeaways, objections, curriculum requests..." required></textarea>
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-600 mb-1">Next Follow-Up Date</label>
+            <input type="date" id="followUpDate" class="w-full border rounded p-2 text-xs" required />
+          </div>
+        </div>
+
+        <button type="submit" id="submitBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-lg text-sm shadow transition">
+          Submit Visit & Travel Claim
+        </button>
+      </form>
+    </div>
+  </main>
+
+  <!-- MANAGER DASHBOARD (MAZHER & DEEPINDER YADAV) -->
+  <main id="managerScreen" class="max-w-6xl mx-auto p-4 hidden">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
+      <div>
+        <h2 class="text-xl font-bold text-slate-800">Management Overview</h2>
+        <p class="text-xs text-slate-500">Live Team Pipeline, Demos & Expense Approvals</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="managerFilterRep" onchange="renderManagerData()" class="border rounded-lg p-2 text-xs bg-white">
+          <option value="ALL">All Executives (Whole Team)</option>
+          <option value="Shashank">Shashank (Ujjain)</option>
+          <option value="Varun">Varun (Baramati)</option>
+          <option value="Aman">Aman (Gorakhpur)</option>
+          <option value="Imran">Imran (Delhi)</option>
+          <option value="Hasan">Hasan (Lucknow)</option>
+          <option value="Naveen">Naveen (Jaipur)</option>
+          <option value="Shreyas">Shreyas (Jaipur)</option>
+        </select>
+        <button onclick="fetchSheetData()" class="bg-indigo-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-indigo-700 transition">Refresh Data</button>
+      </div>
+    </div>
+
+    <!-- Live KPI Summary -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div class="bg-white p-3 rounded-lg border shadow-sm">
+        <p class="text-xs text-slate-500">Total Visits</p>
+        <p id="kpiVisits" class="text-xl font-bold text-slate-800">0</p>
+      </div>
+      <div class="bg-white p-3 rounded-lg border shadow-sm">
+        <p class="text-xs text-slate-500">Demos (Sched / Done)</p>
+        <p id="kpiDemos" class="text-xl font-bold text-amber-600">0 / 0</p>
+      </div>
+      <div class="bg-white p-3 rounded-lg border shadow-sm">
+        <p class="text-xs text-slate-500">Deals Won</p>
+        <p id="kpiWon" class="text-xl font-bold text-emerald-600">0</p>
+      </div>
+      <div class="bg-white p-3 rounded-lg border shadow-sm">
+        <p class="text-xs text-slate-500">Total Travel Claims</p>
+        <p id="kpiClaims" class="text-xl font-bold text-indigo-600">₹ 0</p>
+      </div>
+    </div>
+
+    <!-- Visit Records Table -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
+      <table class="w-full text-left border-collapse text-xs">
+        <thead class="bg-slate-50 border-b text-slate-600">
+          <tr>
+            <th class="p-3">Date</th>
+            <th class="p-3">Executive</th>
+            <th class="p-3">City</th>
+            <th class="p-3">School Name</th>
+            <th class="p-3">Met With</th>
+            <th class="p-3">Stage</th>
+            <th class="p-3">Net KM</th>
+            <th class="p-3">Expense</th>
+            <th class="p-3">Proof Photos</th>
+          </tr>
+        </thead>
+        <tbody id="managerTableBody" class="divide-y divide-slate-100">
+          <tr>
+            <td colspan="9" class="p-4 text-center text-slate-400">Loading live visit entries...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- APPLICATION LOGIC -->
+  <script>
+    // Populate login options
+    const userSelect = document.getElementById("loginUserSelect");
+    USERS.forEach(u => {
+      const opt = document.createElement("option");
+      opt.value = u.id;
+      opt.textContent = `${u.name} (${u.role} - ${u.city})`;
+      userSelect.appendChild(opt);
+    });
+
+    function handleLogin() {
+      const uid = parseInt(document.getElementById("loginUserSelect").value);
+      const pin = document.getElementById("loginPin").value;
+      const user = USERS.find(u => u.id === uid && u.pin === pin);
+
+      if (!user) {
+        document.getElementById("loginError").classList.remove("hidden");
+        return;
+      }
+
+      currentUser = user;
+      document.getElementById("loginError").classList.add("hidden");
+      document.getElementById("loginScreen").classList.add("hidden");
+      document.getElementById("logoutBtn").classList.remove("hidden");
+      document.getElementById("userStatus").textContent = `${user.name} | ${user.role} (${user.city})`;
+
+      if (user.isManager) {
+        document.getElementById("managerScreen").classList.remove("hidden");
+        fetchSheetData();
+      } else {
+        document.getElementById("repScreen").classList.remove("hidden");
+        document.getElementById("repBadge").textContent = `${user.name} - ${user.city}`;
+      }
+    }
+
+    function logout() {
+      currentUser = null;
+      document.getElementById("loginPin").value = "";
+      document.getElementById("repScreen").classList.add("hidden");
+      document.getElementById("managerScreen").classList.add("hidden");
+      document.getElementById("logoutBtn").classList.add("hidden");
+      document.getElementById("userStatus").textContent = "Not logged in";
+      document.getElementById("loginScreen").classList.remove("hidden");
+    }
+
+    function calcKm() {
+      const open = parseFloat(document.getElementById("openingKm").value) || 0;
+      const close = parseFloat(document.getElementById("closingKm").value) || 0;
+      const rate = document.getElementById("vehicle").value === "Car" ? 8.0 : 3.5;
+      const net = close >= open ? close - open : 0;
+      document.getElementById("claimAmount").value = `₹ ${(net * rate).toFixed(2)} (${net} KM)`;
+    }
+
+    function toggleDemoDate() {
+      const stage = document.getElementById("clientStage").value;
+      const demoBox = document.getElementById("demoDateField");
+      if (stage === "Demo Scheduled" || stage === "Demo Done") {
+        demoBox.classList.remove("hidden");
+      } else {
+        demoBox.classList.add("hidden");
+      }
+    }
+
+    function toBase64(file) {
+      return new Promise((resolve) => {
+        if (!file) return resolve("");
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function submitVisit(e) {
+      e.preventDefault();
+      const btn = document.getElementById("submitBtn");
+      btn.disabled = true;
+      btn.textContent = "Uploading & Saving to Sheet...";
+
+      const openImgFile = document.getElementById("openKmImg").files[0];
+      const closeImgFile = document.getElementById("closeKmImg").files[0];
+      const frontImgFile = document.getElementById("frontImg").files[0];
+
+      const payload = {
+        repName: currentUser.name,
+        role: currentUser.role,
+        city: currentUser.city,
+        vehicle: document.getElementById("vehicle").value,
+        openingKm: document.getElementById("openingKm").value,
+        closingKm: document.getElementById("closingKm").value,
+        openKmImg: await toBase64(openImgFile),
+        closeKmImg: await toBase64(closeImgFile),
+        frontImg: await toBase64(frontImgFile),
+        entityType: document.getElementById("entityType").value,
+        schoolName: document.getElementById("schoolName").value,
+        meetingDoneWith: document.getElementById("meetingDoneWith").value,
+        clientStage: document.getElementById("clientStage").value,
+        demoDate: document.getElementById("demoDate").value,
+        totalStudents: document.getElementById("totalStudents").value,
+        grades: document.getElementById("grades").value,
+        competitorBooks: document.getElementById("competitorBooks").value,
+        meetingRemarks: document.getElementById("meetingRemarks").value,
+        followUpDate: document.getElementById("followUpDate").value
+      };
+
+      try {
+        await fetch(SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        alert("Visit and travel claim successfully saved!");
+        document.getElementById("visitForm").reset();
+        calcKm();
+      } catch (err) {
+        alert("Submission failed. Check network connection.");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Submit Visit & Travel Claim";
+      }
+    }
+
+    let globalRecords = [];
+
+    async function fetchSheetData() {
+      const tbody = document.getElementById("managerTableBody");
+      tbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-slate-400">Loading live entries...</td></tr>`;
+
+      try {
+        const res = await fetch(SCRIPT_URL);
+        globalRecords = await res.json();
+        renderManagerData();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-red-500">Failed to load data. Ensure Apps Script Web App URL is correctly deployed.</td></tr>`;
+      }
+    }
+
+    function renderManagerData() {
+      const filter = document.getElementById("managerFilterRep").value;
+      const filtered = filter === "ALL" ? globalRecords : globalRecords.filter(r => r["Rep Name"] === filter);
+
+      let visits = filtered.length;
+      let demoSched = 0, demoDone = 0, won = 0, claims = 0;
+
+      const tbody = document.getElementById("managerTableBody");
+      tbody.innerHTML = "";
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-slate-400">No records found.</td></tr>`;
+      }
+
+      filtered.forEach(r => {
+        const stage = r["Client Stage"] || "";
+        if (stage === "Demo Scheduled") demoSched++;
+        if (stage === "Demo Done") demoDone++;
+        if (stage === "Deal Won") won++;
+        claims += parseFloat(r["Travel Claim (₹)"]) || 0;
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td class="p-3 text-slate-500">${r["Timestamp"] ? new Date(r["Timestamp"]).toLocaleDateString() : "-"}</td>
+          <td class="p-3 font-semibold text-slate-800">${r["Rep Name"] || "-"}</td>
+          <td class="p-3 text-slate-500">${r["City"] || "-"}</td>
+          <td class="p-3 font-medium text-slate-800">${r["School/Distributor Name"] || "-"}</td>
+          <td class="p-3"><span class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[11px] font-medium">${r["Meeting Done With"] || "-"}</span></td>
+          <td class="p-3"><span class="bg-amber-50 text-amber-800 px-2 py-0.5 rounded text-[11px] font-semibold">${stage}</span></td>
+          <td class="p-3 text-slate-700">${r["Net KM"] || 0} km</td>
+          <td class="p-3 font-bold text-slate-800">₹ ${parseFloat(r["Travel Claim (₹)"] || 0).toFixed(2)}</td>
+          <td class="p-3 space-x-1">
+            ${r["Opening KM Photo"] && r["Opening KM Photo"].indexOf("http") === 0 ? `<a href="${r["Opening KM Photo"]}" target="_blank" class="text-indigo-600 hover:underline text-[11px]">KM</a>` : ""}
+            ${r["Front Photo"] && r["Front Photo"].indexOf("http") === 0 ? `<a href="${r["Front Photo"]}" target="_blank" class="text-indigo-600 hover:underline text-[11px]">School</a>` : ""}
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      document.getElementById("kpiVisits").textContent = visits;
+      document.getElementById("kpiDemos").textContent = `${demoSched} / ${demoDone}`;
+      document.getElementById("kpiWon").textContent = won;
+      document.getElementById("kpiClaims").textContent = `₹ ${claims.toFixed(2)}`;
+    }
+  </script>
+</body>
+</html>
